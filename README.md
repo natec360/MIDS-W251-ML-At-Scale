@@ -1,79 +1,75 @@
-# MIDS-W251
-
-# Improving Reddit Post Classification via Deslanging
+# W251: Predicting Flight Delays through Machine Learning Classifiers at Scale
 
 ## Overview
-This project investigates the impact of **deslanging**—replacing slang terms with standard English equivalents—on the accuracy of subreddit classification for Reddit self-posts using a variety of machine learning models.
+This project uses machine learning models at scale to predict flight delays using a rich set of features, including weather data, prior aircraft delays, and network delay patterns. The goal was to build models that could accurately identify delayed flights in advance, minimizing costs and improving airline operations.
 
-## Authors
-Nathan Chiu, Kevin Fu, Allison Schlissel  
-📬 [nchiu20@berkeley.edu](mailto:nchiu20@berkeley.edu), [kevinfu@berkeley.edu](mailto:kevinfu@berkeley.edu), [apschlissel@berkeley.edu](mailto:apschlissel@berkeley.edu)  
-🔗 [GitHub Repository](https://github.com/apschlissel/w266-final-project)
+## Team
+**W261 Fall 2022, Section 5, Group 4**  
+Nathan Chiu, Dominic Lim, Raul Merino, Javier Rondon
 
 ## Motivation
-Reddit is rich in informal language and slang, posing challenges for NLP models. We hypothesized that deslanging Reddit posts could enhance classification accuracy by simplifying and standardizing the input text.
-
-## Research Questions
-1. Do transformer-based models outperform a Naive Bayes baseline for subreddit classification?
-2. Does deslanging Reddit posts improve model performance?
+False negatives (i.e., predicting a flight will be on time when it is delayed) are costly. Thus, we focused on **maximizing recall**, using the **F2 score** as our primary metric, which weights recall more heavily than precision.
 
 ## Dataset
-Reddit self-posts were scraped along with their subreddit labels. Three subreddit group types were analyzed:
+- **Flight data**: 41 million rows from 6 years, filtered to include only US flights with 54 engineered features.
+- **Weather data**: 31 million rows from 379 US weather stations, joined to both origin and destination airports.
+- Joined via composite key of `(airport, timestamp)` rounded to the hour.
 
-- **5 Handpicked Subreddits** (slang-heavy): `wallstreetbets`, `teenagers`, `GenZ`, `copypasta`, `unpopularopinion`
-- **5 Similar Subreddits** (gaming-focused): `gaming`, `PS4`, `pokemon`, `xboxone`, `leagueoflegends`
-- **5 Random Subreddits**: `Bitcoin`, `memes`, `travel`, `philosophy`, `stocks`
+## Data Engineering Pipeline
+1. **Join Raw Files**  
+   - Airport codes, timezones, weather stations
+   - Standardized timestamps (UTC), removed duplicates
 
-Each group had datasets with 2,500, 5,000, and 25,000 posts.
+2. **Feature Engineering**  
+   - **Previous Flight Delay**: Tracks aircraft delay history using tail number
+   - **Weather Indicators**: Fog, ice, snow, thunderstorms, etc.
+   - **Pagerank**: Measures airport network influence
+   - **Delay States**: Clusters of delay behavior at given timestamps
+   - **Airport Capacity**: Ratio of actual vs scheduled departures
 
-## Methodology
+3. **Model Dataset Prep**
+   - Final joined dataset split using **Blocked Time Series Cross Validation**
+   - Exported to parquet files
 
-### Deslanging
-- Compiled a slang-to-standard-English dictionary using data from [Slangit.com](https://slangit.com), manually curated for relevance.
-- Used regex substitution to replace slang with standardized terms.
+## Modeling Approach
 
 ### Models Used
-- **Naive Bayes (baseline)**: Multinomial model with bag-of-words vectorization.
-- **BERT**: Uncased pre-trained transformer model.
-- **T5**: Text-to-text transformer reframing classification as generation.
-- **RNN**: Two-layer LSTM with dense and softmax layers.
+- **Logistic Regression** (initial model)
+- **Decision Tree**
+- **Random Forest**
+- **MLP (Multi-Layer Perceptron)**
+- **Ensemble Voting Model**: Voting mechanisms included one-positive, one-negative, and majority voting
 
-### Evaluation Metric
-- Used **F1 Score** to better capture performance across imbalanced classes.
+### Feature Importance
+Feature categories with highest importance:
+- `PREV_DEP_DELAY` (Previous Flight Delay)
+- `PER_DELAY_15_ORIGIN_LAST_3` (Recent origin delay ratio)
+- Pagerank, Weather, and Delay States
+
+### Evaluation Metrics
+- **F2 Score**: Emphasizes recall to reduce false negatives
+- **Precision**
+- **Recall**
 
 ## Results
 
-| Model      | Performance Highlights      | Deslanging Effect          |
-|------------|-----------------------------|-----------------------------|
-| **BERT**   | Highest F1 (~80%) on Similar Subreddits | Generally **hurt** performance |
-| **T5**     | Lower than BERT              | Mixed or negative           |
-| **RNN**    | Moderate                     | Minor improvements in some cases |
-| **Naive Bayes** | ~60–65% F1 baseline     | Used for comparison         |
+### Best Model: Ensemble Voting (One Positive)
+- **F2 Score**: 0.558
+- **Precision**: 0.366
+- **Recall**: 0.643
 
-## Key Findings
-- **Deslanging consistently underperformed** vs. using the original text.
-- **BERT outperformed** both T5 and RNN, likely due to contextual bidirectionality.
-- **Short posts** and **non-English posts** were misclassified more often.
-- **Similar subreddit groups** (e.g. gaming-related) had higher classification errors due to topic overlap.
+### Logistic Regression Baseline
+- **Precision**: 0.8208
+- **Recall**: 1.0000
+- **F2 Score**: 0.9582  
+(Note: Skewed due to imbalance and predicting all flights as delayed)
 
-## Lessons Learned
-- Deslanging is error-prone due to:
-  - Context-sensitive meanings (e.g., "zzz" = "boring" or "sleeping")
-  - Word collisions (e.g., "we" = pronoun or slang for "whatever")
-  - Ambiguities in slang like "lol" (game vs. expression)
-- Some slang may actually be helpful for classification due to its subreddit-specific usage.
+## Key Insights
+- **Weather** is responsible for ~20% of total delay minutes.
+- **Delays increase throughout the day**, likely due to network effects.
+- **Previous aircraft delay** shows strong correlation with current delay.
+- **Pagerank & Delay State** features help capture network-based delay propagation.
 
-## Future Work
-- Develop more **context-aware slang translation models**.
-- Fine-tune models on **slang-rich corpora**.
-- Investigate **multi-modal signals** (e.g., emojis, formatting) for classification.
-
-## References
-See full references in the project report. Notable works:
-- Urban Dictionary Embeddings (Wilson et al., 2020)
-- SlangSD Sentiment Dictionary (Wu et al., 2018)
-- Deep Learning in Social Media NLP (Parvathi, 2021)
-- Text Classification with BERT (Winastwan, 2021)
-
-## License
-MIT License – see `LICENSE` file for details.
+## Wins
+- Developed and tested **novel ensemble voting mechanisms**
+- Built and evaluated **feature-rich models using Spark MLlib**
